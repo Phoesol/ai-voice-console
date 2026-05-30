@@ -1,0 +1,63 @@
+# ============================================================
+# AI Voice Console — .gitignore
+# ============================================================
+
+# Runtime environments (Python, Node.js)
+runtime/
+
+# Model checkpoints (download separately)
+data/checkpoints/
+
+# Generated output audio
+data/output/
+output/
+
+# Logs
+data/logs/
+
+# Temporary files
+data/tmp/
+
+# Clone reference audio (user-specific)
+data/clone/
+
+# Reference audio (user-specific)
+data/references/
+
+# Debug audio
+debug_audio/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# Rust build artifacts
+src-tauri/target/
+
+# Tauri generated files
+src-tauri/gen/
+
+# IDE
+.vscode/
+.idea/
+.trae/
+.workbuddy/
+
+# System files
+Thumbs.db
+.DS_Store
+
+# Config (contains API keys — use config.example.json as template)
+config.json
+
+# Compiled binary
+*.exe
+
+# Backup
+bak/
+
+# Project markers
+.project-root

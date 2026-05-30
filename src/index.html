@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Voice Console</title>
+  <link rel="stylesheet" href="https://unpkg.com/lucide-static@latest/font/lucide.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dark">
+  <!-- ===== Custom Title Bar ===== -->
+  <div id="titlebar" data-tauri-drag-region>
+    <div class="titlebar-left" data-tauri-drag-region>
+      <i class="icon-microphone" style="font-size:16px;color:var(--accent)"></i>
+      <span class="app-title" data-tauri-drag-region data-i18n="app_title">AI Voice Console</span>
+      <span id="pipeline-badge" class="badge badge-idle" data-i18n="status_idle">IDLE</span>
+    </div>
+    <div class="titlebar-center" data-tauri-drag-region>
+      <span id="status-line" class="status-line">ASR: Qwen3 | LLM: DeepSeek | TTS: MiMo</span>
+    </div>
+    <div class="titlebar-right">
+      <button id="btn-minimize" class="win-btn" title="最小化"><i class="icon-minus"></i></button>
+      <button id="btn-maximize" class="win-btn" title="最大化"><i class="icon-square"></i></button>
+      <button id="btn-close" class="win-btn win-btn-close" title="关闭"><i class="icon-x"></i></button>
+    </div>
+  </div>
+
+  <!-- ===== Main App ===== -->
+  <div id="app">
+    <!-- ===== Chat Stage ===== -->
+    <div id="chat-stage">
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+        </div>
+        <h2 class="empty-title" data-i18n="empty_title">按下麦克风，开始对话</h2>
+        <p class="empty-sub" data-i18n="empty_sub">按住T键录音，松开停止（或使用鼠标中键）</p>
+        <div class="empty-hint">
+          <span class="hint-tag"><i class="icon-keyboard"></i> <span data-i18n="hint_ptt">中键/热键</span></span>
+          <span class="hint-tag"><i class="icon-settings"></i> <span data-i18n="hint_settings">右上角设置</span></span>
+        </div>
+      </div>
+      <!-- Messages -->
+      <div id="messages" class="messages"></div>
+    </div>
+
+    <!-- ===== Control Deck ===== -->
+    <div id="control-deck">
+      <!-- Waveform Visualizer -->
+      <div id="waveform" class="waveform">
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      </div>
+
+      <!-- Main Mic Button -->
+      <div id="mic-container">
+        <button id="mic-btn" class="mic-btn mic-idle" title="按下录音">
+          <div class="mic-ring"></div>
+          <div class="mic-ring mic-ring-2"></div>
+          <div class="mic-icon-wrap">
+            <i class="icon-microphone"></i>
+          </div>
+        </button>
+        <div id="mic-label" class="mic-label" data-i18n="btn_mic">按下说话</div>
+      </div>
+
+      <!-- Quick Controls Row -->
+      <div class="quick-controls">
+        <div class="qc-group">
+          <label class="qc-item">
+            <input type="checkbox" id="ptt-enable" checked />
+            <span class="qc-label"><i class="icon-radio" style="font-size:14px"></i> <span data-i18n="qc_ptt">热键</span></span>
+          </label>
+          <label class="qc-item">
+            <input type="checkbox" id="translate-enable" />
+            <span class="qc-label"><i class="icon-languages" style="font-size:14px"></i> <span data-i18n="qc_translate">翻译</span></span>
+          </label>
+          <label class="qc-item">
+            <input type="checkbox" id="director-enable" />
+            <span class="qc-label"><i class="icon-clapperboard" style="font-size:14px"></i> <span data-i18n="qc_director">导演</span></span>
+          </label>
+          <label class="qc-item">
+            <input type="checkbox" id="bypass" />
+            <span class="qc-label"><i class="icon-bypass" style="font-size:14px"></i> <span data-i18n="qc_bypass">直通</span></span>
+          </label>
+        </div>
+        <div class="qc-group">
+          <label class="qc-item">
+            <span class="qc-label" data-i18n="qc_speed">语速</span>
+            <input type="range" id="playback-speed" min="50" max="300" value="98" class="slider-mini" />
+            <input type="number" id="playback-speed-label" class="qc-val-input" value="0.98" min="0.50" max="3.00" step="0.01" />
+          </label>
+          <label class="qc-item">
+            <span class="qc-label" data-i18n="qc_volume">音量</span>
+            <input type="range" id="volume" min="0" max="100" value="100" class="slider-mini" />
+            <input type="number" id="volume-label" class="qc-val-input" value="100" min="0" max="100" step="1" />
+          </label>
+        </div>
+        <div class="qc-group qc-right">
+          <button id="btn-settings" class="qc-btn" title="设置" data-i18n-title="btn_settings"><i class="icon-settings"></i></button>
+          <button id="btn-log" class="qc-btn" title="日志" data-i18n-title="btn_log"><i class="icon-terminal"></i></button>
+          <button id="btn-tts-input" class="qc-btn" title="文本合成" data-i18n-title="btn_tts_input"><i class="icon-message-square"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Log Panel (collapsible) ===== -->
+    <div id="log-panel" class="log-panel log-collapsed">
+      <div class="log-header">
+        <span class="log-title"><i class="icon-terminal" style="font-size:12px"></i> <span data-i18n="log_title">日志</span></span>
+        <div class="log-actions">
+          <button id="btn-copy-log" class="log-btn" title="复制"><i class="icon-copy" style="font-size:12px"></i></button>
+          <button id="btn-clear-log" class="log-btn" title="清空"><i class="icon-trash-2" style="font-size:12px"></i></button>
+          <button id="btn-toggle-log" class="log-btn" title="展开/收起"><i class="icon-chevron-up" style="font-size:12px"></i></button>
+        </div>
+      </div>
+      <div id="log-box" class="log-body"></div>
+    </div>
+  </div>
+
+  <!-- ===== Settings Drawer ===== -->
+  <div id="settings-overlay" class="overlay"></div>
+  <div id="settings-drawer" class="drawer" style="transform:translateX(100%)">
+    <div class="drawer-header">
+      <h2 class="drawer-title"><i class="icon-settings" style="font-size:18px"></i> <span data-i18n="btn_settings">设置</span></h2>
+      <button id="btn-close-settings" class="drawer-close"><i class="icon-x"></i></button>
+    </div>
+    <div class="drawer-body">
+      <!-- Settings Tabs -->
+      <div class="settings-tabs">
+        <button class="stab active" data-stab="voice" data-i18n="tab_voice">🎤 音频</button>
+        <button class="stab" data-stab="tts" data-i18n="tab_tts">🎭 音色</button>
+        <button class="stab" data-stab="model" data-i18n="tab_model">🤖 模型</button>
+        <button class="stab" data-stab="other" data-i18n="tab_other">⚡ 其他</button>
+        <button class="stab" data-stab="director" data-i18n="tab_director">🎬 情景编排</button>
+      </div>
+
+      <!-- Audio Tab -->
+      <div class="stab-panel active" id="stab-voice">
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_audio_input">音频输入</h3>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_host_api">主机API</label>
+            <select id="host-api" class="form-input"></select>
+            <button id="btn-refresh-devices" class="form-btn"><i class="icon-refresh-cw" style="font-size:12px"></i></button>
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_mic">麦克风</label>
+            <select id="mic-device" class="form-input wide"></select>
+          </div>
+        </div>
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_audio_output">音频输出</h3>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_output_device">输出设备（TTS路由）</label>
+            <select id="output-device" class="form-input wide"></select>
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_monitor_device">试听设备（自己听TTS）</label>
+            <select id="monitor-device" class="form-input wide"></select>
+          </div>
+        </div>
+        <div class="form-section">
+          <h3 class="section-title">系统音频捕获</h3>
+          <label class="form-check">
+            <input type="checkbox" id="wasapi-loopback" />
+            <span>WASAPI Loopback 内录</span>
+          </label>
+          <div class="form-row mt-sm">
+            <label class="form-label">扬声器设备</label>
+            <select id="speaker-device" class="form-input wide"></select>
+          </div>
+        </div>
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_ptt">热键</h3>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_ptt_key1">热键1</label>
+            <select id="hotkey1-modifier" class="form-input" style="flex:none;width:80px">
+              <option value="none">无</option>
+              <option value="ctrl">CTRL</option>
+              <option value="shift">SHIFT</option>
+              <option value="alt">ALT</option>
+            </select>
+            <input type="text" id="hotkey1-key" class="form-input hotkey-key-input" value="" placeholder="点击设置" readonly />
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_ptt_key2">热键2</label>
+            <select id="ptt-key2" class="form-input">
+              <option value="none">无</option>
+              <option value="t">T</option>
+              <option value="middle_mouse">鼠标中键</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <span id="ptt-status" class="status-text stopped">○ 热键未启用</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TTS / Voice Tab -->
+      <div class="stab-panel" id="stab-tts">
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_voice_config">音色配置</h3>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_mimo_model">MiMo 模型</label>
+            <select id="mimo-model" class="form-input">
+              <option value="mimo-v2.5-tts">TTS（预置音色）</option>
+              <option value="mimo-v2.5-tts-voicedesign">VoiceDesign（音色设计）</option>
+              <option value="mimo-v2.5-tts-voiceclone">VoiceClone（音色克隆）</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_preset_voice">预置音色</label>
+            <select id="mimo-voice" class="form-input">
+              <option>冰糖</option><option>茉莉</option><option>苏打</option><option>白桦</option>
+              <option>Mia</option><option>Chloe</option><option>Milo</option><option>Dean</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_style_prompt">style_prompt</label>
+            <input type="text" id="mimo-style-prompt" class="form-input wide" placeholder="如：用温柔妩媚的语气说话" />
+          </div>
+          <div class="form-row" id="vd-row">
+            <label class="form-label" data-i18n="label_voice_design">音色描述</label>
+            <input type="text" id="mimo-voice-design" class="form-input wide" placeholder="如：性感妩媚的女大学生" />
+          </div>
+          <div class="form-row" id="clone-row" style="display:none">
+            <label class="form-label">克隆路径</label>
+            <input type="text" id="mimo-clone-path" class="form-input wide" placeholder="音频文件路径" />
+            <button id="btn-browse-clone" class="form-btn"><i class="icon-folder" style="font-size:12px"></i></button>
+          </div>
+        </div>
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_tts_params">TTS 参数</h3>
+          <div class="form-row">
+            <label class="form-label wide-label" data-i18n="label_top_p">Top P</label>
+            <input type="range" id="top-p" min="1" max="100" value="95" class="form-range" />
+            <span id="top-p-label" class="form-val">0.95</span>
+          </div>
+          <div class="form-row">
+            <label class="form-label wide-label" data-i18n="label_temperature">Temperature</label>
+            <input type="range" id="temperature" min="1" max="150" value="6" class="form-range" />
+            <span id="temp-label" class="form-val">0.06</span>
+          </div>
+          <div class="form-row">
+            <label class="form-label wide-label" data-i18n="label_rep_penalty">Rep Penalty</label>
+            <input type="range" id="rep-penalty" min="9" max="20" value="12" class="form-range" />
+            <span id="rep-label" class="form-val">1.2</span>
+          </div>
+          <button id="btn-reset-params" class="form-btn" data-i18n="btn_reset_params">恢复默认</button>
+        </div>
+      </div>
+
+      <!-- Model Tab -->
+      <div class="stab-panel" id="stab-model">
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_asr">ASR 语音识别</h3>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_asr_engine">ASR 引擎</label>
+            <select id="asr-engine" class="form-input"></select>
+            <button id="btn-load-asr" class="form-btn accent" data-i18n="btn_load_asr">加载</button>
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_emotion_model">情绪模型</label>
+            <select id="emotion-model" class="form-input"></select>
+          </div>
+          <div class="form-row status-row">
+            <span class="form-label">ASR引擎</span>
+            <span id="asr-status" class="status-text danger" data-i18n="status_not_loaded">未加载</span>
+          </div>
+          <div class="form-row status-row">
+            <span class="form-label">情绪模型</span>
+            <span id="emotion-status" class="status-text">未启用</span>
+          </div>
+        </div>
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_tts_server">TTS 服务器</h3>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_tts_engine">TTS 引擎</label>
+            <select id="tts-engine" class="form-input"></select>
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_mimo_key">MiMo API Key</label>
+            <input type="password" id="mimo-api-key" placeholder="sk-..." class="form-input wide" />
+            <button id="btn-test-mimo" class="form-btn">测试</button>
+            <span id="mimo-test-status" class="status-text"></span>
+          </div>
+          <div class="form-row">
+            <label class="form-label">MiMo API Base</label>
+            <input type="text" id="mimo-api-base" value="https://api.xiaomimimo.com/v1" class="form-input wide" />
+          </div>
+          <div class="form-row" id="local-tts-url-row" style="display:none">
+            <label class="form-label" data-i18n="label_api_address">本地 API 地址</label>
+            <input type="text" id="tts-api-url" value="http://127.0.0.1:18084" class="form-input" />
+            <button id="btn-connect-api" class="form-btn" data-i18n="btn_connect">连接</button>
+            <span id="tts-server-status" class="status-text danger" data-i18n="status_not_connected">未连接</span>
+          </div>
+        </div>
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_llm_translate">LLM 翻译/导演</h3>
+          <div class="form-row">
+            <label class="form-label">DS API Key</label>
+            <input type="password" id="deepseek-api-key" placeholder="sk-..." class="form-input wide" />
+            <button id="btn-test-llm" class="form-btn">测试</button>
+            <span id="llm-test-status" class="status-text"></span>
+          </div>
+          <div class="form-row">
+            <label class="form-label">DS API Base</label>
+            <input type="text" id="deepseek-api-base" value="https://api.deepseek.com/v1" class="form-input wide" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_ds_model">DS 模型</label>
+            <input type="text" id="deepseek-model" value="deepseek-v4-flash" class="form-input" />
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_target_lang">目标语言</label>
+            <select id="translate-lang" class="form-input">
+              <option>Korean</option><option>Chinese</option><option>English</option><option>Japanese</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Other Tab -->
+      <div class="stab-panel" id="stab-other">
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_vad">VAD 过滤</h3>
+          <label class="form-check">
+            <input type="checkbox" id="vad-enable" checked />
+            <span data-i18n="check_enable_vad">启用 VAD 过滤</span>
+          </label>
+          <div class="form-row mt-sm">
+            <label class="form-label">最小静音</label>
+            <input type="number" id="vad-silence" value="600" min="100" max="2000" step="50" class="form-input small" /> ms
+          </div>
+          <div class="form-row">
+            <label class="form-label">语音填充</label>
+            <input type="number" id="vad-pad" value="400" min="0" max="1000" step="50" class="form-input small" /> ms
+          </div>
+        </div>
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_appearance">外观</h3>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_theme">主题</label>
+            <select id="theme-select" class="form-input">
+              <option value="dark" data-i18n="theme_dark">深色</option>
+              <option value="light" data-i18n="theme_light">浅色</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-label" data-i18n="label_language">语言</label>
+            <select id="lang-select" class="form-input">
+              <option value="zh" data-i18n="lang_zh">中文</option>
+              <option value="en" data-i18n="lang_en">English</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-section">
+          <h3 class="section-title" data-i18n="section_data">数据</h3>
+          <div class="form-row">
+            <label class="form-check"><input type="checkbox" id="auto-save" checked /><span data-i18n="check_auto_save">自动保存音频</span></label>
+          </div>
+          <div class="btn-row mt-md">
+            <button id="btn-save-settings" class="form-btn accent wide-btn" data-i18n="btn_save_settings">全部保存</button>
+          </div>
+        </div>
+      </div>
+      <!-- Director Tab -->
+      <div class="stab-panel" id="stab-director">
+        <!-- 导演模式基础配置 -->
+        <div class="form-section">
+          <h3 class="section-title">导演模式</h3>
+          <label class="form-check">
+            <input type="checkbox" id="director-toggle" />
+            <span data-i18n="check_enable_director">启用导演模式</span>
+          </label>
+          <div id="director-fields" class="hidden">
+            <div class="form-row"><label class="form-label">角色</label><textarea id="director-character" rows="2" class="form-input"></textarea></div>
+            <div class="form-row"><label class="form-label">场景</label><textarea id="director-scene" rows="2" class="form-input"></textarea></div>
+            <div class="form-row"><label class="form-label">指导</label><textarea id="director-direction" rows="2" class="form-input"></textarea></div>
+          </div>
+          <label class="form-check mt-sm">
+            <input type="checkbox" id="tmd-enable" checked />
+            <span data-i18n="check_text_model_director">文本模型导演</span>
+          </label>
+          <label class="form-check mt-sm">
+            <input type="checkbox" id="sexy-afterglow" />
+            <span data-i18n="check_sexy_afterglow">追加反差尾音</span>
+          </label>
+          <label class="form-check mt-sm">
+            <input type="checkbox" id="optimize-text" />
+            <span data-i18n="check_optimize_text">扩写润色</span>
+          </label>
+        </div>
+
+        <!-- 模块A: TMD 情景管理 -->
+        <div id="tmd-section" class="form-section">
+          <h3 class="section-title">情景管理</h3>
+          <div class="tmd-zones">
+            <div class="tmd-zone">
+              <div class="tmd-zone-header">
+                <span class="section-title" style="margin-bottom:0">🟢 启用区</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <button class="tmd-reorder-btn" title="上移" data-director-action="tmdMoveUp">▲</button>
+                  <button class="tmd-reorder-btn" title="下移" data-director-action="tmdMoveDown">▼</button>
+                  <span id="tmd-active-count" class="tmd-count">0个</span>
+                </div>
+              </div>
+              <ul id="tmd-active-list" class="tmd-drag-list" data-zone="active"></ul>
+            </div>
+            <div class="tmd-move-btns">
+              <button class="form-btn tmd-move-btn" title="移入备用" data-director-action="tmdMoveToStandby">→</button>
+              <button class="form-btn tmd-move-btn" title="移入启用" data-director-action="tmdMoveToActive">←</button>
+            </div>
+            <div class="tmd-zone">
+              <div class="tmd-zone-header">
+                <span class="section-title" style="margin-bottom:0">💤 备用区</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <button class="tmd-reorder-btn" title="上移" data-director-action="tmdMoveUp">▲</button>
+                  <button class="tmd-reorder-btn" title="下移" data-director-action="tmdMoveDown">▼</button>
+                  <span id="tmd-standby-count" class="tmd-count">0个</span>
+                </div>
+              </div>
+              <ul id="tmd-standby-list" class="tmd-drag-list" data-zone="standby"></ul>
+            </div>
+          </div>
+          <div class="form-row mt-sm"><label class="form-label">情景名</label><input type="text" id="tmd-name" class="form-input" placeholder="如：闲聊" /></div>
+          <div class="form-row"><label class="form-label">触发条件</label><div class="input-with-btn"><input type="text" id="tmd-trigger" class="form-input" /><button class="form-btn btn-expand" data-target="tmd-trigger-expand">展开</button></div></div>
+          <div class="form-row"><label class="form-label">音色描述</label><div class="input-with-btn"><textarea id="tmd-prompt" rows="2" class="form-input"></textarea><button class="form-btn btn-expand" data-target="tmd-prompt-expand">展开</button></div></div>
+          <div class="form-row"><label class="form-label">角色</label><div class="input-with-btn"><textarea id="tmd-character" rows="2" class="form-input"></textarea><button class="form-btn btn-expand" data-target="tmd-character-expand">展开</button></div></div>
+          <div class="form-row"><label class="form-label">场景</label><div class="input-with-btn"><textarea id="tmd-scene" rows="2" class="form-input"></textarea><button class="form-btn btn-expand" data-target="tmd-scene-expand">展开</button></div></div>
+          <div class="form-row"><label class="form-label">指导</label><div class="input-with-btn"><textarea id="tmd-direction" rows="2" class="form-input"></textarea><button class="form-btn btn-expand" data-target="tmd-direction-expand">展开</button></div></div>
+          <div class="btn-row mt-sm">
+            <button class="form-btn" data-director-action="tmdAddScenario">添加</button>
+            <button class="form-btn" data-director-action="tmdCopyScenario">复制</button>
+            <button class="form-btn danger" data-director-action="tmdDelScenario">删除</button>
+            <button class="form-btn accent" data-director-action="tmdSaveScenario">保存</button>
+          </div>
+        </div>
+
+        <!-- 模块1: TTS 识别标准配置 -->
+        <div id="ts-section" class="form-section">
+          <h3 class="section-title">TTS 识别标准</h3>
+          <div class="tmd-zones">
+            <div class="tmd-zone">
+              <div class="tmd-zone-header">
+                <span class="section-title" style="margin-bottom:0">🟢 启用</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <button class="tmd-reorder-btn" title="上移" data-director-action="tsMoveUp">▲</button>
+                  <button class="tmd-reorder-btn" title="下移" data-director-action="tsMoveDown">▼</button>
+                  <span id="ts-active-count" class="tmd-count">0个</span>
+                </div>
+              </div>
+              <ul id="ts-active-list" class="tmd-drag-list" data-zone="active"></ul>
+            </div>
+            <div class="tmd-move-btns">
+              <button class="form-btn tmd-move-btn" title="移入备用" data-director-action="tsMoveToStandby">→</button>
+              <button class="form-btn tmd-move-btn" title="移入启用" data-director-action="tsMoveToActive">←</button>
+            </div>
+            <div class="tmd-zone">
+              <div class="tmd-zone-header">
+                <span class="section-title" style="margin-bottom:0">💤 备用</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <button class="tmd-reorder-btn" title="上移" data-director-action="tsMoveUp">▲</button>
+                  <button class="tmd-reorder-btn" title="下移" data-director-action="tsMoveDown">▼</button>
+                  <span id="ts-standby-count" class="tmd-count">0个</span>
+                </div>
+              </div>
+              <ul id="ts-standby-list" class="tmd-drag-list" data-zone="standby"></ul>
+            </div>
+          </div>
+          <div class="form-row"><label class="form-label">标准名</label><input type="text" id="ts-name" class="form-input" placeholder="如：默认标准" /></div>
+          <div class="form-row"><label class="form-label">音色描述</label><div class="input-with-btn"><textarea id="ts-voice-design" rows="2" class="form-input textarea-scroll"></textarea><button class="form-btn btn-expand" data-target="ts-voice-design-expand">展开</button></div></div>
+          <div class="form-row"><label class="form-label">标签控制</label><div class="input-with-btn"><textarea id="ts-tag-control" rows="2" class="form-input textarea-scroll"></textarea><button class="form-btn btn-expand" data-target="ts-tag-control-expand">展开</button></div></div>
+          <div class="form-row"><label class="form-label">风格控制</label><div class="input-with-btn"><textarea id="ts-style-control" rows="2" class="form-input textarea-scroll"></textarea><button class="form-btn btn-expand" data-target="ts-style-control-expand">展开</button></div></div>
+          <div class="btn-row mt-sm">
+            <button class="form-btn" data-director-action="tsAddStandard">添加</button>
+            <button class="form-btn" data-director-action="tsCopyStandard">复制</button>
+            <button class="form-btn danger" data-director-action="tsDelStandard">删除</button>
+            <button class="form-btn accent" data-director-action="tsSaveStandard">保存</button>
+          </div>
+        </div>
+
+        <!-- 模块2: LLM 风格识别指导 -->
+        <div id="lg-section" class="form-section">
+          <h3 class="section-title">LLM 风格识别指导</h3>
+          <div class="tmd-zones">
+            <div class="tmd-zone">
+              <div class="tmd-zone-header">
+                <span class="section-title" style="margin-bottom:0">🟢 启用</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <button class="tmd-reorder-btn" title="上移" data-director-action="lgMoveUp">▲</button>
+                  <button class="tmd-reorder-btn" title="下移" data-director-action="lgMoveDown">▼</button>
+                  <span id="lg-active-count" class="tmd-count">0个</span>
+                </div>
+              </div>
+              <ul id="lg-active-list" class="tmd-drag-list" data-zone="active"></ul>
+            </div>
+            <div class="tmd-move-btns">
+              <button class="form-btn tmd-move-btn" title="移入备用" data-director-action="lgMoveToStandby">→</button>
+              <button class="form-btn tmd-move-btn" title="移入启用" data-director-action="lgMoveToActive">←</button>
+            </div>
+            <div class="tmd-zone">
+              <div class="tmd-zone-header">
+                <span class="section-title" style="margin-bottom:0">💤 备用</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <button class="tmd-reorder-btn" title="上移" data-director-action="lgMoveUp">▲</button>
+                  <button class="tmd-reorder-btn" title="下移" data-director-action="lgMoveDown">▼</button>
+                  <span id="lg-standby-count" class="tmd-count">0个</span>
+                </div>
+              </div>
+              <ul id="lg-standby-list" class="tmd-drag-list" data-zone="standby"></ul>
+            </div>
+          </div>
+          <div class="form-row"><label class="form-label">名称</label><input type="text" id="lg-name" class="form-input" placeholder="如：Flash提示词模板" /></div>
+          <div class="form-row"><label class="form-label">内容</label><div class="input-with-btn"><textarea id="lg-content" rows="3" class="form-input textarea-scroll"></textarea><button class="form-btn btn-expand" data-target="lg-content-expand">展开</button></div></div>
+          <div class="btn-row mt-sm">
+            <button class="form-btn" data-director-action="lgAddGuide">添加</button>
+            <button class="form-btn" data-director-action="lgCopyGuide">复制</button>
+            <button class="form-btn danger" data-director-action="lgDelGuide">删除</button>
+            <button class="form-btn accent" data-director-action="lgSaveGuide">保存</button>
+          </div>
+        </div>
+
+        <!-- 模块3: 提示词生成与工作流替换 -->
+        <div id="prompt-gen-section" class="form-section">
+          <h3 class="section-title">提示词生成与工作流替换</h3>
+          <button id="btn-merge-context" class="form-btn accent" style="margin-bottom:8px">🔀 合并生成上下文</button>
+          <textarea id="merged-context" rows="6" class="form-input wide textarea-scroll" style="margin-bottom:8px;min-height:120px" placeholder="点击上方按钮合并各模块的启用配置..."></textarea>
+          <div class="btn-row" style="margin-bottom:12px">
+            <button id="btn-save-merged" class="form-btn">💾 保存上下文</button>
+          </div>
+          <button id="btn-generate-prompt" class="form-btn accent" style="margin-bottom:8px">
+            <span id="btn-generate-text">🤖 生成新的 LLM 识别指导</span>
+            <span id="btn-generate-spinner" class="generating-spinner hidden"></span>
+          </button>
+          <textarea id="new-prompt-preview" rows="8" class="form-input wide textarea-scroll" style="margin-bottom:8px;min-height:160px" placeholder="LLM 返回的新提示词将显示在这里..."></textarea>
+          <div class="btn-row" style="margin-bottom:12px">
+            <button id="btn-save-generated" class="form-btn">💾 保存LLM指导</button>
+          </div>
+          <h4 class="section-title" style="margin-top:8px">System Prompt（系统提示词）</h4>
+          <button id="btn-preview-current" class="form-btn" style="margin-bottom:8px">👁 预览当前提示词</button>
+          <textarea id="system-prompt-editor" rows="10" class="form-input wide textarea-scroll" style="margin-bottom:8px;min-height:200px" placeholder="点击预览加载当前 System Prompt，可直接编辑后保存..."></textarea>
+          <div class="btn-row">
+            <button id="btn-save-system-prompt" class="form-btn accent">💾 保存 System Prompt</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TTS Input Modal ===== -->
+  <div id="tts-modal" class="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 data-i18n="tts_modal_title">文本转语音</h3>
+        <button id="btn-close-tts-modal" class="modal-close"><i class="icon-x"></i></button>
+      </div>
+      <div class="modal-body">
+        <textarea id="tts-input" placeholder="输入要合成的文本..." rows="5" class="form-input wide" data-i18n-placeholder="tts_placeholder"></textarea>
+        <div class="form-row mt-md">
+          <label class="form-check"><input type="radio" name="tts-target" value="virtual" checked /><span data-i18n="tts_target_virtual">虚拟声卡</span></label>
+          <label class="form-check"><input type="radio" name="tts-target" value="speaker" /><span data-i18n="tts_target_speaker">默认耳机</span></label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-tts-generate" class="form-btn accent" data-i18n="tts_generate">生成并播放</button>
+        <div id="tts-result" class="hint-text" data-i18n="tts_waiting">等待输入...</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="expand-modal" class="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content" style="max-width:600px">
+      <div class="modal-header">
+        <h3 id="expand-modal-title">编辑</h3>
+        <button id="btn-close-expand" class="modal-close"><i class="icon-x"></i></button>
+      </div>
+      <div class="modal-body">
+        <textarea id="expand-modal-text" rows="12" class="form-input wide" style="font-size:14px;min-height:300px"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-expand-confirm" class="form-btn accent">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="state.js"></script>
+  <script src="audio.js"></script>
+  <script src="settings-ui.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

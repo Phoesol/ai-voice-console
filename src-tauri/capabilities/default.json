@@ -1,0 +1,45 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window of AI Voice Console",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "runtime/python312/Scripts/qwen-asr-serve",
+          "sidecar": false,
+          "args": true
+        },
+        {
+          "name": "runtime/python312/python",
+          "sidecar": false,
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "runtime/python312/Scripts/qwen-asr-serve",
+          "sidecar": false,
+          "args": true
+        },
+        {
+          "name": "runtime/python312/python",
+          "sidecar": false,
+          "args": true
+        }
+      ]
+    },
+    "shell:allow-kill",
+    "dialog:allow-open"
+  ]
+}
