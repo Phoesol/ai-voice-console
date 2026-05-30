@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <b>English</b> | <a href="./README_CN.md">中文</a>
+</p>
+
+<p align="center">
   <a href="#-features">Features</a> •
   <a href="#-architecture">Architecture</a> •
   <a href="#-quick-start">Quick Start</a> •
